@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DreamShare - Fast & Secure Sharing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="background-blobs">
+        <div class="blob shape1"></div>
+        <div class="blob shape2"></div>
+        <div class="blob shape3"></div>
+    </div>
+
+    <header>
+        <div class="logo">
+            <i class='bx bxs-cloud-upload' ></i>
+            <h1>DreamShare</h1>
+        </div>
+        <p>Effortlessly share files and texts within your network or anywhere.</p>
+    </header>
+
+    <main class="container">
+        <!-- Feature 1: Local Network Share (Same IP) -->
+        <section class="card glass">
+            <div class="card-header">
+                <h2><i class='bx bx-wifi'></i> Local Network (Same IP)</h2>
+                <div class="badge" id="ip-indicator">Loading IP...</div>
+            </div>
+            
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="ip-text">Share Text</button>
+                <button class="tab-btn" data-tab="ip-file">Share File</button>
+            </div>
+
+            <div class="tab-content active" id="ip-text">
+                <textarea id="ip-text-input" placeholder="Type or paste your text here..." rows="4"></textarea>
+                <button class="btn btn-primary" onclick="shareText()">
+                    <i class='bx bx-send' ></i> Share Text
+                </button>
+            </div>
+
+            <div class="tab-content" id="ip-file">
+                <div class="file-upload-wrapper">
+                    <input type="file" id="ip-file-input" class="file-input">
+                    <div class="upload-area">
+                        <i class='bx bx-cloud-upload'></i>
+                        <p>Drag & Drop or Click to Select File</p>
+                    </div>
+                </div>
+                <div id="ip-file-name" class="selected-file-name"></div>
+                <button class="btn btn-primary" onclick="shareLocalFile()">
+                    <i class='bx bx-share-alt' ></i> Share File
+                </button>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="shared-items-section">
+                <h3><i class='bx bx-history' ></i> Recent Shared Items</h3>
+                <div style="display: flex; gap: 0.5rem; position: absolute; top: -5px; right: 0;">
+                    <button class="btn btn-icon btn-refresh" style="position: static;" onclick="clearAllTexts()" title="Clear all local texts">
+                        <i class='bx bx-trash'></i>
+                    </button>
+                    <button class="btn btn-icon btn-refresh" style="position: static;" onclick="fetchLocalData()" title="Refresh">
+                        <i class='bx bx-refresh'></i> Refresh
+                    </button>
+                </div>
+                
+                <div class="items-list" id="local-items-list">
+                    <!-- Items will be injected here via JS -->
+                    <div class="empty-state">No items shared on this network yet.</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Feature 2: Code Share -->
+        <section class="card glass">
+            <div class="card-header">
+                <h2><i class='bx bx-globe'></i> Global Share (via Code)</h2>
+            </div>
+            
+            <div class="code-share-section">
+                <h3>Upload & Generate Code</h3>
+                <div class="file-upload-wrapper">
+                    <input type="file" id="code-file-input" class="file-input">
+                    <div class="upload-area">
+                        <i class='bx bx-code-block' ></i>
+                        <p>Select File to Generate Code</p>
+                    </div>
+                </div>
+                <div id="code-file-name" class="selected-file-name"></div>
+                <button class="btn btn-secondary" onclick="uploadCodeFile()">
+                    <i class='bx bx-cog' ></i> Get Code
+                </button>
+
+                <div id="generated-code-box" class="code-result hidden">
+                    <p>Your sharing code:</p>
+                    <div class="code-display">
+                        <span id="the-generated-code">---</span>
+                        <button class="btn-icon" onclick="copyCode()" title="Copy to clipboard"><i class='bx bx-copy'></i></button>
+                    </div>
+                    <div id="code-timer" style="margin-top: 0.5rem; font-weight: 600; color: var(--danger); font-size: 1.1rem; display: none;">
+                        Expires in: <span id="timer-countdown">10:00</span>
+                    </div>
+                    <p style="margin-top: 1rem; font-size: 0.9rem; color: var(--text-muted);">Scan to Download</p>
+                    <div id="qrcode-container" style="margin-top: 0.5rem; display: flex; justify-content: center; padding: 10px; background: white; border-radius: 8px; width: fit-content; margin-left: auto; margin-right: auto;"></div>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="code-download-section">
+                <h3>Receive File</h3>
+                <div class="input-group">
+                    <input type="text" id="receive-code-input" placeholder="Enter 6-character code" maxlength="6">
+                    <button class="btn btn-primary" onclick="downloadViaCode()">
+                        <i class='bx bx-download' ></i> Download
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
