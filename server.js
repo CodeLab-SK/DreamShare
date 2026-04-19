@@ -6,7 +6,13 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 8080;
+
+// ✅ Ensure uploads folder exists (VERY IMPORTANT for Railway)
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
 
 app.use(cors());
 app.use(express.json());
@@ -15,7 +21,7 @@ app.use(express.static('public'));
 // Configure Multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -25,42 +31,47 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // In-memory data store
-const ipDataStore = {}; // { '127.0.0.1': { texts: [], files: [] } }
-const codeFilesStore = {}; // { 'CODE123': { fileInfo } }
+const ipDataStore = {};
+const codeFilesStore = {};
 
 // Helper to get client IP
 const getClientIp = (req) => {
   const forwarded = req.headers['x-forwarded-for'];
-  const ip = forwarded ? forwarded.split(/, /)[0] : req.connection.remoteAddress;
+  const ip = forwarded ? forwarded.split(',')[0] : req.socket.remoteAddress;
   return ip || 'unknown-ip';
 };
 
-const FILE_LIFETIME = 5 * 60 * 1000; // 5 minutes
-const CODE_LIFETIME = 10 * 60 * 1000; // 10 minutes
+const FILE_LIFETIME = 5 * 60 * 1000;
+const CODE_LIFETIME = 10 * 60 * 1000;
 
 const deleteFileAndData = (filename) => {
-    const filePath = path.join(__dirname, 'uploads', filename);
-    if (fs.existsSync(filePath)) {
-        fs.unlink(filePath, (err) => {
-            if (err) console.error(`Error deleting file ${filename}:`, err);
-        });
-    }
+  const filePath = path.join(uploadDir, filename);
 
-    // Delete from IP Store
-    for (const ip in ipDataStore) {
-        ipDataStore[ip].files = ipDataStore[ip].files.filter(f => f.filename !== filename);
-    }
+  if (fs.existsSync(filePath)) {
+    fs.unlink(filePath, (err) => {
+      if (err) console.error(`Error deleting file ${filename}:`, err);
+    });
+  }
 
-    // Delete from Code Store
-    for (const code in codeFilesStore) {
-        if (codeFilesStore[code].filename === filename) {
-            delete codeFilesStore[code];
-        }
+  for (const ip in ipDataStore) {
+    ipDataStore[ip].files = ipDataStore[ip].files.filter(f => f.filename !== filename);
+  }
+
+  for (const code in codeFilesStore) {
+    if (codeFilesStore[code].filename === filename) {
+      delete codeFilesStore[code];
     }
+  }
 };
 
-// -- FEATURE 1: Same IP Share -- //
+// ---------------- ROUTES ---------------- //
 
+// Test route (VERY IMPORTANT for browser testing)
+app.get('/', (req, res) => {
+  res.send('DreamShare backend is running 🚀');
+});
+
+// IP DATA
 app.get('/api/ip/data', (req, res) => {
   const ip = getClientIp(req);
   if (!ipDataStore[ip]) {
@@ -72,64 +83,36 @@ app.get('/api/ip/data', (req, res) => {
 app.post('/api/ip/text', (req, res) => {
   const ip = getClientIp(req);
   const { text } = req.body;
+
   if (!text) return res.status(400).json({ error: 'Text is required' });
 
   if (!ipDataStore[ip]) ipDataStore[ip] = { texts: [], files: [] };
-  
+
   const newText = {
-    id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex'),
+    id: crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex'),
     text,
     timestamp: Date.now()
   };
-  
+
   ipDataStore[ip].texts.push(newText);
   res.json({ success: true, text: newText });
 
   setTimeout(() => {
-      if (ipDataStore[ip]) {
-          ipDataStore[ip].texts = ipDataStore[ip].texts.filter(t => t.id !== newText.id);
-      }
+    if (ipDataStore[ip]) {
+      ipDataStore[ip].texts = ipDataStore[ip].texts.filter(t => t.id !== newText.id);
+    }
   }, FILE_LIFETIME);
-});
-
-app.delete('/api/ip/text/:id', (req, res) => {
-  const ip = getClientIp(req);
-  if (ipDataStore[ip]) {
-      ipDataStore[ip].texts = ipDataStore[ip].texts.filter(t => t.id !== req.params.id);
-  }
-  res.json({ success: true });
-});
-
-app.delete('/api/ip/text', (req, res) => {
-  const ip = getClientIp(req);
-  if (ipDataStore[ip]) {
-      ipDataStore[ip].texts = [];
-  }
-  res.json({ success: true });
-});
-
-app.delete('/api/ip/file/:filename', (req, res) => {
-  const ip = getClientIp(req);
-  const { filename } = req.params;
-  
-  if (ipDataStore[ip]) {
-      // Find the file to verify it belongs to this IP
-      const fileExists = ipDataStore[ip].files.find(f => f.filename === filename);
-      if (fileExists) {
-          deleteFileAndData(filename);
-      }
-  }
-  res.json({ success: true });
 });
 
 app.post('/api/ip/upload', upload.single('file'), (req, res) => {
   const ip = getClientIp(req);
+
   if (!req.file) return res.status(400).json({ error: 'File is required' });
 
   if (!ipDataStore[ip]) ipDataStore[ip] = { texts: [], files: [] };
 
   const newFile = {
-    id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex'),
+    id: crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex'),
     filename: req.file.filename,
     originalname: req.file.originalname,
     size: req.file.size,
@@ -142,19 +125,17 @@ app.post('/api/ip/upload', upload.single('file'), (req, res) => {
   setTimeout(() => deleteFileAndData(req.file.filename), FILE_LIFETIME);
 });
 
-// Download IP shared file
 app.get('/api/ip/download/:filename', (req, res) => {
   const { filename } = req.params;
-  const filePath = path.join(__dirname, 'uploads', filename);
-  
-  // Find the original name based on existing IP store
+  const filePath = path.join(uploadDir, filename);
+
   let originalName = filename;
   for (const ip in ipDataStore) {
-      const fileObj = ipDataStore[ip].files.find(f => f.filename === filename);
-      if (fileObj) {
-          originalName = fileObj.originalname;
-          break;
-      }
+    const fileObj = ipDataStore[ip].files.find(f => f.filename === filename);
+    if (fileObj) {
+      originalName = fileObj.originalname;
+      break;
+    }
   }
 
   if (fs.existsSync(filePath)) {
@@ -164,11 +145,9 @@ app.get('/api/ip/download/:filename', (req, res) => {
   }
 });
 
-
-// -- FEATURE 2: Code Share -- //
-
+// CODE SHARE
 const generateCode = () => {
-    return crypto.randomBytes(3).toString('hex').toUpperCase(); // e.g. A1B2C3
+  return crypto.randomBytes(3).toString('hex').toUpperCase();
 };
 
 app.post('/api/code/upload', upload.single('file'), (req, res) => {
@@ -176,14 +155,14 @@ app.post('/api/code/upload', upload.single('file'), (req, res) => {
 
   let code;
   do {
-      code = generateCode();
-  } while (codeFilesStore[code]); // Ensure uniqueness
+    code = generateCode();
+  } while (codeFilesStore[code]);
 
   codeFilesStore[code] = {
-      filename: req.file.filename,
-      originalname: req.file.originalname,
-      size: req.file.size,
-      timestamp: Date.now()
+    filename: req.file.filename,
+    originalname: req.file.originalname,
+    size: req.file.size,
+    timestamp: Date.now()
   };
 
   res.json({ success: true, code });
@@ -194,21 +173,23 @@ app.post('/api/code/upload', upload.single('file'), (req, res) => {
 app.get('/api/code/download/:code', (req, res) => {
   let { code } = req.params;
   code = code.trim().toUpperCase();
-  const fileInfo = codeFilesStore[code];
 
+  const fileInfo = codeFilesStore[code];
   if (!fileInfo) {
-      return res.status(404).json({ error: 'Invalid code or file expired' });
+    return res.status(404).json({ error: 'Invalid code or expired' });
   }
 
-  const filePath = path.join(__dirname, 'uploads', fileInfo.filename);
+  const filePath = path.join(uploadDir, fileInfo.filename);
+
   if (fs.existsSync(filePath)) {
-      res.download(filePath, fileInfo.originalname);
+    res.download(filePath, fileInfo.originalname);
   } else {
-      res.status(404).json({ error: 'File not found on server' });
+    res.status(404).json({ error: 'File not found on server' });
   }
 });
 
-// Start Server
+// ---------------- START SERVER ---------------- //
+
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
